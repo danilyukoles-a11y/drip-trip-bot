@@ -306,6 +306,20 @@ class BotCrawler:
             # Check nav patterns
             if is_nav(btn_text):
                 self.stats["skipped_nav"] += 1
+                node["children"].append({
+                    "trigger": {
+                        "type": "inline",
+                        "text": btn_text,
+                        "callback_data": btn.get("callback_data", ""),
+                    },
+                    "text": "",
+                    "media": None,
+                    "reply_keyboard": [],
+                    "inline_keyboard": [],
+                    "skipped": True,
+                    "skip_reason": f"NAV: {btn_text}",
+                    "children": [],
+                })
                 continue
 
             # Check unsafe patterns
@@ -359,6 +373,16 @@ class BotCrawler:
             # Check nav patterns
             if is_nav(btn_text):
                 self.stats["skipped_nav"] += 1
+                node["children"].append({
+                    "trigger": {"type": "reply", "text": btn_text},
+                    "text": "",
+                    "media": None,
+                    "reply_keyboard": [],
+                    "inline_keyboard": [],
+                    "skipped": True,
+                    "skip_reason": f"NAV: {btn_text}",
+                    "children": [],
+                })
                 continue
 
             # Check unsafe patterns

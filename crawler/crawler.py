@@ -145,10 +145,12 @@ class BotCrawler:
                 responses.append(msg)
         return responses
 
-    async def send_and_wait(self, text: str = None, callback_data: bytes = None, message=None) -> list:
-        """Send a message or click a button, wait for bot response(s).
+    async def send_and_wait(self, text: str = None, click_msg=None, click_text: str = None) -> list:
+        """Send a message or click an inline button, wait for bot response(s).
 
         Uses min_id tracking to only read NEW messages after our action.
+        For inline buttons: pass click_msg (the message object) and click_text (button text).
+        For text/commands: pass text.
         Returns a list of messages from the bot, sorted oldest-first.
         """
         for attempt in range(config.MAX_RETRIES + 1):
@@ -156,8 +158,9 @@ class BotCrawler:
                 # Remember last message ID BEFORE sending
                 last_id = await self._get_last_msg_id()
 
-                if callback_data and message:
-                    await message.click(data=callback_data)
+                if click_msg and click_text:
+                    # Click inline button by its text on the message
+                    await click_msg.click(text=click_text)
                 elif text:
                     await self.client.send_message(self.bot_entity, text)
                 else:
@@ -188,6 +191,12 @@ class BotCrawler:
                 wait_time = e.seconds + 5
                 print(f"  FloodWait: sleeping {wait_time}s...")
                 await asyncio.sleep(wait_time)
+            except Exception as e:
+                print(f"  Error: {type(e).__name__}: {e}")
+                if attempt < config.MAX_RETRIES:
+                    await asyncio.sleep(2)
+                else:
+                    break
 
         self.stats["timeouts"] += 1
         return []
@@ -217,8 +226,7 @@ class BotCrawler:
         if trigger["type"] == "command":
             responses = await self.send_and_wait(text=trigger["text"])
         elif trigger["type"] == "inline" and parent_message:
-            cb_data = trigger.get("callback_data", "").encode("utf-8")
-            responses = await self.send_and_wait(callback_data=cb_data, message=parent_message)
+            responses = await self.send_and_wait(click_msg=parent_message, click_text=trigger["text"])
         elif trigger["type"] == "reply":
             responses = await self.send_and_wait(text=trigger["text"])
         else:

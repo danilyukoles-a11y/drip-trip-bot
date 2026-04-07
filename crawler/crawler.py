@@ -148,18 +148,25 @@ class BotCrawler:
     async def send_and_wait(self, text: str = None, click_msg=None, click_text: str = None) -> list:
         """Send a message or click an inline button, wait for bot response(s).
 
-        Uses min_id tracking to only read NEW messages after our action.
-        For inline buttons: pass click_msg (the message object) and click_text (button text).
+        For inline buttons: pass click_msg and click_text.
         For text/commands: pass text.
-        Returns a list of messages from the bot, sorted oldest-first.
+
+        Handles two bot response patterns:
+        1. Bot sends a NEW message (common for reply-keyboard actions)
+        2. Bot EDITS the existing message (common for inline button clicks)
         """
+        is_inline_click = bool(click_msg and click_text)
+
         for attempt in range(config.MAX_RETRIES + 1):
             try:
-                # Remember last message ID BEFORE sending
+                # Remember state BEFORE action
                 last_id = await self._get_last_msg_id()
+                edit_date_before = None
+                if is_inline_click:
+                    edit_date_before = click_msg.edit_date
 
-                if click_msg and click_text:
-                    # Click inline button by its text on the message
+                # Perform action
+                if is_inline_click:
                     await click_msg.click(text=click_text)
                 elif text:
                     await self.client.send_message(self.bot_entity, text)
@@ -168,18 +175,32 @@ class BotCrawler:
 
                 # Wait for bot to respond
                 await asyncio.sleep(config.DELAY_BETWEEN_ACTIONS)
+
+                # Check for NEW messages first
                 responses = await self._collect_new_messages(last_id)
 
-                # If no responses yet, wait longer and retry once
                 if not responses:
+                    # Wait a bit more
                     await asyncio.sleep(config.MULTI_MESSAGE_WAIT)
                     responses = await self._collect_new_messages(last_id)
-                elif len(responses) > 0:
-                    # Got responses — wait briefly for potential follow-ups
-                    await asyncio.sleep(0.5)
-                    responses = await self._collect_new_messages(last_id)
+
+                # If still no new messages and this was an inline click,
+                # check if the bot EDITED the original message instead
+                if not responses and is_inline_click:
+                    updated = await self.client.get_messages(
+                        self.bot_entity, ids=click_msg.id
+                    )
+                    if updated:
+                        # Check if message was edited (new edit_date or different text)
+                        if (updated.edit_date and updated.edit_date != edit_date_before) or \
+                           (updated.text != click_msg.text) or \
+                           (updated.reply_markup != click_msg.reply_markup):
+                            return [updated]
 
                 if responses:
+                    # Wait briefly for potential follow-up messages
+                    await asyncio.sleep(0.5)
+                    responses = await self._collect_new_messages(last_id)
                     responses.sort(key=lambda m: m.date)
                     return responses
 
@@ -358,6 +379,12 @@ class BotCrawler:
             print(f"{'  ' * depth}[inline] {btn_text} [{btn.get('callback_data', '')}]")
             child = await self.crawl_node(child_trigger, depth + 1, primary_msg)
             node["children"].append(child)
+
+            # After inline click, the bot may have edited primary_msg.
+            # Re-fetch it so the next sibling button click uses the current state.
+            refreshed = await self.client.get_messages(self.bot_entity, ids=primary_msg.id)
+            if refreshed:
+                primary_msg = refreshed
 
         # Crawl reply button children
         for btn in reply_btns_raw:

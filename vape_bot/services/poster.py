@@ -98,7 +98,7 @@ class PosterCache:
                 product["price_max"] = max(prices) if prices else 0
                 product["stock"] = 1.0 if any_in_stock else 0.0
 
-                cat_id = product["category_id"]
+                cat_id = str(product["category_id"])
                 if cat_id not in self._products:
                     self._products[cat_id] = []
                 self._products[cat_id].append(product)
@@ -125,7 +125,7 @@ class PosterCache:
         parent_products = []
 
         for p in raw_products:
-            cat_id = p["menu_category_id"]
+            cat_id = str(p["menu_category_id"])
             ingredient_id = p.get("ingredient_id", "")
             spots = p.get("spots", [])
             price = int(spots[0].get("price", "0")) / 100 if spots else 0

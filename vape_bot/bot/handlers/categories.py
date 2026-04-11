@@ -20,6 +20,56 @@ from vape_bot.services.poster import poster_cache
 router = Router()
 
 
+def _find_category_path(category_id: int) -> list[str]:
+    """Знайти шлях від кореня до категорії: ["Pod-системи", "Vaporesso"]."""
+    # L3
+    for parent_id, l3_subs in SUBCATEGORIES_L3.items():
+        if category_id in l3_subs:
+            for root_id, subs in SUBCATEGORIES.items():
+                if parent_id in subs:
+                    return [ROOT_CATEGORIES[root_id], subs[parent_id], l3_subs[category_id]]
+    # L2
+    for root_id, subs in SUBCATEGORIES.items():
+        if category_id in subs:
+            return [ROOT_CATEGORIES[root_id], subs[category_id]]
+    # Root
+    if category_id in ROOT_CATEGORIES:
+        return [ROOT_CATEGORIES[category_id]]
+    return [str(category_id)]
+
+
+def _breadcrumb(category_id: int, suffix: str = "") -> str:
+    """Побудувати деревоподібний breadcrumb для категорії.
+
+    Приклад: 📁 Pod-системи
+             ╰── 📁 Vaporesso (Стор. 1/5):
+    """
+    path = _find_category_path(category_id)
+    lines = [f"📁 {path[0]}"]
+    for i, name in enumerate(path[1:], 1):
+        indent = "    " * (i - 1)
+        lines.append(f"{indent}╰── 📁 {name}")
+    lines[-1] += suffix
+    return "\n".join(lines)
+
+
+def _product_breadcrumb(category_id: int, product_name: str) -> str:
+    """Breadcrumb з назвою товару на кінці.
+
+    Приклад: 📁 Pod-системи
+             ╰── 📁 Vaporesso
+                 ╰── Vaporesso Xros 5 Mini
+    """
+    path = _find_category_path(category_id)
+    lines = [f"📁 {path[0]}"]
+    for i, name in enumerate(path[1:], 1):
+        indent = "    " * (i - 1)
+        lines.append(f"{indent}╰── 📁 {name}")
+    indent = "    " * len(path[1:])
+    lines.append(f"{indent}╰── {product_name}")
+    return "\n".join(lines)
+
+
 @router.message(F.text == "📁 Категорії")
 async def show_categories(message: Message):
     """Показати кореневі категорії."""
@@ -53,15 +103,8 @@ async def show_products(callback: CallbackQuery):
     # Перевірити чи це L3 категорія (має підкатегорії)
     l3_kb = subcategories_l3_kb(sub_id)
     if l3_kb:
-        # Знайти назву
-        for subs in SUBCATEGORIES.values():
-            if sub_id in subs:
-                name = subs[sub_id]
-                break
-        else:
-            name = str(sub_id)
         await callback.message.edit_text(
-            f"📁 {name}\nОберіть підкатегорію:",
+            _breadcrumb(sub_id) + "\nОберіть підкатегорію:",
             reply_markup=l3_kb,
         )
         await callback.answer()
@@ -86,7 +129,7 @@ async def show_products(callback: CallbackQuery):
 
     if not products:
         await callback.message.edit_text(
-            f"📁 {name}\n\nТоварів не знайдено.",
+            _breadcrumb(sub_id) + "\n\nТоварів не знайдено.",
             reply_markup=products_kb([], 0, sub_id, parent_callback),
         )
         await callback.answer()
@@ -94,7 +137,7 @@ async def show_products(callback: CallbackQuery):
 
     total_pages = max(1, (len(products) + 9) // 10)
     await callback.message.edit_text(
-        f"📁 {name} (Стор. 1/{total_pages}):",
+        _breadcrumb(sub_id, f" (Стор. 1/{total_pages}):"),
         reply_markup=products_kb(products, 0, sub_id, parent_callback),
     )
     await callback.answer()
@@ -125,7 +168,7 @@ async def paginate_products(callback: CallbackQuery):
     total_pages = max(1, (len(products) + 9) // 10)
 
     await callback.message.edit_text(
-        f"📁 {name} (Стор. {page + 1}/{total_pages}):",
+        _breadcrumb(category_id, f" (Стор. {page + 1}/{total_pages}):"),
         reply_markup=products_kb(products, page, category_id, parent_callback),
     )
     await callback.answer()
@@ -151,10 +194,11 @@ async def show_product(callback: CallbackQuery):
             return
 
         mods = product.get("modifications", [])
+        effective_cat = cat_id or int(product["category_id"])
         await callback.message.edit_text(
-            f"{product['name']}\nОберіть варіант:",
+            _product_breadcrumb(effective_cat, product["name"]) + "\nОберіть варіант:",
             reply_markup=modifications_kb(
-                product_id, cat_id or product["category_id"], mods, page
+                product_id, effective_cat, mods, page
             ),
         )
         await callback.answer()
@@ -167,16 +211,17 @@ async def show_product(callback: CallbackQuery):
 
     # Regular product — in stock
     stock_val = product.get("stock", 0)
+    effective_cat = cat_id or int(product["category_id"])
 
     text = (
-        f"{product['name']}\n\n"
-        f"💰 Ціна: {product['price']:.0f} грн\n"
+        _product_breadcrumb(effective_cat, product["name"])
+        + f"\n\n💰 Ціна: {product['price']:.0f} грн\n"
         f"📦 Статус: ✅ В наявності ({stock_val:.0f} шт.)"
     )
 
     await callback.message.edit_text(
         text,
-        reply_markup=product_card_kb(product_id, cat_id or product["category_id"], page),
+        reply_markup=product_card_kb(product_id, effective_cat, page),
     )
     await callback.answer()
 

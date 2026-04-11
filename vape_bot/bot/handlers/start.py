@@ -40,5 +40,7 @@ async def age_confirmed(callback: CallbackQuery):
 
 @router.callback_query(F.data == "age_no")
 async def age_denied(callback: CallbackQuery):
-    await callback.message.edit_text(AGE_TEXT, reply_markup=age_kb)
-    await callback.answer("Для використання бота необхідно бути старше 18 років")
+    await callback.answer(
+        "Для використання бота необхідно бути старше 18 років",
+        show_alert=True,
+    )

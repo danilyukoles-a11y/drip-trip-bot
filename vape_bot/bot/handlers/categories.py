@@ -134,7 +134,10 @@ async def paginate_products(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("prod_"))
 async def show_product(callback: CallbackQuery):
     """Картка товару або список модифікацій."""
-    product_id = callback.data.split("_")[1]
+    parts = callback.data.split("_")
+    product_id = parts[1]
+    cat_id = int(parts[2]) if len(parts) > 2 else 0
+    page = int(parts[3]) if len(parts) > 3 else 0
     product = poster_cache.get_product_by_id(product_id)
 
     if not product:
@@ -151,7 +154,7 @@ async def show_product(callback: CallbackQuery):
         await callback.message.edit_text(
             f"{product['name']}\nОберіть варіант:",
             reply_markup=modifications_kb(
-                product_id, product["category_id"], mods
+                product_id, cat_id or product["category_id"], mods, page
             ),
         )
         await callback.answer()
@@ -173,7 +176,7 @@ async def show_product(callback: CallbackQuery):
 
     await callback.message.edit_text(
         text,
-        reply_markup=product_card_kb(product_id, product["category_id"]),
+        reply_markup=product_card_kb(product_id, cat_id or product["category_id"], page),
     )
     await callback.answer()
 
@@ -184,6 +187,8 @@ async def select_modification(callback: CallbackQuery):
     parts = callback.data.split("_")
     parent_id = parts[1]
     mod_id = parts[2]
+    cat_id = parts[3] if len(parts) > 3 else ""
+    page = parts[4] if len(parts) > 4 else "0"
 
     product = poster_cache.get_product_by_id(parent_id)
     if not product:
@@ -217,10 +222,11 @@ async def select_modification(callback: CallbackQuery):
     )
     total = get_cart_total(callback.from_user.id)
 
+    back_cb = f"page_{cat_id}_{page}" if cat_id else "back_categories"
     await callback.message.edit_text(
         f"✅ {cart_product_name} додано в кошик!\n"
         f"💰 Поточна сума кошика: {total:.2f} грн",
-        reply_markup=after_add_cart_kb(),
+        reply_markup=after_add_cart_kb(back_cb),
     )
     await callback.answer()
 
@@ -228,7 +234,10 @@ async def select_modification(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("addcart_"))
 async def add_to_cart_handler(callback: CallbackQuery):
     """Додати товар в кошик."""
-    product_id = callback.data.split("_")[1]
+    parts = callback.data.split("_")
+    product_id = parts[1]
+    cat_id = parts[2] if len(parts) > 2 else ""
+    page = parts[3] if len(parts) > 3 else "0"
     product = poster_cache.get_product_by_id(product_id)
 
     if not product:
@@ -248,9 +257,10 @@ async def add_to_cart_handler(callback: CallbackQuery):
     )
     total = get_cart_total(callback.from_user.id)
 
+    back_cb = f"page_{cat_id}_{page}" if cat_id else "back_categories"
     await callback.message.edit_text(
         f"✅ {product['name']} додано в кошик!\n"
         f"💰 Поточна сума кошика: {total:.2f} грн",
-        reply_markup=after_add_cart_kb(),
+        reply_markup=after_add_cart_kb(back_cb),
     )
     await callback.answer()

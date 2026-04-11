@@ -68,7 +68,7 @@ def products_kb(products: list[dict], page: int, category_id: int, parent_callba
             else:
                 text = f"❌ {p['name']} — {price_str}"
             buttons.append([InlineKeyboardButton(
-                text=text, callback_data=f"prod_{p['id']}",
+                text=text, callback_data=f"prod_{p['id']}_{category_id}_{page}",
             )])
         else:
             stock = p.get("stock", 0)
@@ -77,7 +77,7 @@ def products_kb(products: list[dict], page: int, category_id: int, parent_callba
             else:
                 text = f"❌ {p['name']} — {p['price']:.0f} грн"
             buttons.append([InlineKeyboardButton(
-                text=text, callback_data=f"prod_{p['id']}",
+                text=text, callback_data=f"prod_{p['id']}_{category_id}_{page}",
             )])
 
     nav = []
@@ -98,7 +98,7 @@ def products_kb(products: list[dict], page: int, category_id: int, parent_callba
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def modifications_kb(product_id: str, category_id: int, modifications: list[dict]) -> InlineKeyboardMarkup:
+def modifications_kb(product_id: str, category_id: int, modifications: list[dict], page: int = 0) -> InlineKeyboardMarkup:
     """Список модифікацій товару для вибору."""
     buttons = []
     for m in modifications:
@@ -109,28 +109,28 @@ def modifications_kb(product_id: str, category_id: int, modifications: list[dict
             text = f"❌ {m['name']} — {m['price']:.0f} грн"
         buttons.append([InlineKeyboardButton(
             text=text,
-            callback_data=f"mod_{product_id}_{m['mod_id']}",
+            callback_data=f"mod_{product_id}_{m['mod_id']}_{category_id}_{page}",
         )])
     buttons.append([InlineKeyboardButton(
         text="⬅️ Назад до списку",
-        callback_data=f"sub_{category_id}",
+        callback_data=f"page_{category_id}_{page}",
     )])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def product_card_kb(product_id: str, category_id: int) -> InlineKeyboardMarkup:
+def product_card_kb(product_id: str, category_id: int, page: int = 0) -> InlineKeyboardMarkup:
     """Кнопки картки товару."""
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🛒 Додати в кошик", callback_data=f"addcart_{product_id}")],
-        [InlineKeyboardButton(text="⬅️ Назад до списку", callback_data=f"sub_{category_id}")],
+        [InlineKeyboardButton(text="🛒 Додати в кошик", callback_data=f"addcart_{product_id}_{category_id}_{page}")],
+        [InlineKeyboardButton(text="⬅️ Назад до списку", callback_data=f"page_{category_id}_{page}")],
     ])
 
 
-def after_add_cart_kb() -> InlineKeyboardMarkup:
+def after_add_cart_kb(back_callback: str = "back_categories") -> InlineKeyboardMarkup:
     """Кнопки після додавання в кошик."""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🛒 Перейти до кошика", callback_data="go_cart")],
-        [InlineKeyboardButton(text="🛍 Продовжити покупки", callback_data="back_categories")],
+        [InlineKeyboardButton(text="🛍 Продовжити покупки", callback_data=back_callback)],
     ])
 
 

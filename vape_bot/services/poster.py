@@ -1,5 +1,6 @@
 """Робота з Poster API. Кешування товарів з залишками та модифікаціями."""
 
+import asyncio
 import logging
 import time
 from datetime import datetime, timedelta
@@ -24,6 +25,7 @@ class PosterCache:
     def __init__(self):
         self._products: dict[str, list[dict]] = {}  # category_id → products
         self._last_update: datetime | None = None
+        self._refreshing: bool = False
 
     def _is_expired(self) -> bool:
         if self._last_update is None:
@@ -156,8 +158,37 @@ class PosterCache:
         self._last_update = datetime.now()
 
     def _ensure_cache(self) -> None:
-        if self._is_expired():
-            self._fetch_all_products()
+        """Перевірити кеш. Якщо протух — запустити фоновий рефреш (не блокує)."""
+        if self._is_expired() and not self._refreshing:
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._refresh_in_background())
+            except RuntimeError:
+                # No event loop — sync context (tests, scripts)
+                self._fetch_all_products()
+
+    async def _refresh_in_background(self) -> None:
+        """Оновити кеш у фоновому потоці, не блокуючи event loop."""
+        if self._refreshing:
+            return
+        self._refreshing = True
+        try:
+            logger.info("Background cache refresh started...")
+            await asyncio.to_thread(self._fetch_all_products)
+            logger.info("Background cache refresh done")
+        except Exception:
+            logger.exception("Background cache refresh failed")
+        finally:
+            self._refreshing = False
+
+    async def preload(self) -> None:
+        """Pre-load кешу при старті бота. Викликати перед polling."""
+        logger.info("Pre-loading product cache...")
+        await asyncio.to_thread(self._fetch_all_products)
+        logger.info(
+            "Cache loaded: %d products",
+            sum(len(v) for v in self._products.values()),
+        )
 
     def get_products_by_category(self, category_id: int) -> list[dict]:
         """Товари по категорії. Автоматично оновлює кеш."""

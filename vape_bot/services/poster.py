@@ -5,7 +5,7 @@ import logging
 import time
 from datetime import datetime, timedelta
 
-import requests
+import httpx
 
 from vape_bot.config.settings import (
     CACHE_TTL_MINUTES,
@@ -36,7 +36,7 @@ class PosterCache:
         p = {"token": POSTER_TOKEN}
         if params:
             p.update(params)
-        resp = requests.get(f"{POSTER_API_URL}/{method}", params=p, timeout=15)
+        resp = httpx.get(f"{POSTER_API_URL}/{method}", params=p, timeout=15.0)
         resp.raise_for_status()
         return resp.json()
 

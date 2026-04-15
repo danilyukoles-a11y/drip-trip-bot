@@ -12,6 +12,7 @@ from vape_bot.database.cart import clear_cart, get_cart, get_cart_total
 from vape_bot.database.orders import create_order, update_poster_ids
 from vape_bot.database.users import get_or_create_user, get_user, update_user
 from vape_bot.services.notification import notify_new_order, notify_poster_sync_failed
+from vape_bot.services.phone import normalize_phone
 from vape_bot.services.poster_orders import create_poster_order
 
 router = Router()
@@ -29,10 +30,11 @@ async def _start_checkout(user_id: int, username: str | None, message: Message, 
 
     # Перевірити чи є збережені дані (повторне замовлення)
     if user and user.get("full_name") and user.get("phone"):
+        normalized_phone = normalize_phone(user["phone"]) or user["phone"]
         await state.set_state(OrderStates.waiting_payment)
         await state.update_data(
             full_name=user["full_name"],
-            phone=user["phone"],
+            phone=normalized_phone,
             city=user["city"],
             address=user["address"],
         )
@@ -40,7 +42,7 @@ async def _start_checkout(user_id: int, username: str | None, message: Message, 
             "🚀 Швидке замовлення\n\n"
             "Знайдено ваші дані з попереднього замовлення:\n"
             f"👤 Отримувач: {user['full_name']}\n"
-            f"📞 Телефон: {user['phone']}\n"
+            f"📞 Телефон: {normalized_phone}\n"
             f"🏙 Місто: {user['city']}\n"
             f"📍 Адреса: {user['address']}\n\n"
             "Використати ці дані чи ввести нові?"
@@ -93,7 +95,14 @@ async def process_full_name(message: Message, state: FSMContext):
 
 @router.message(OrderStates.waiting_phone)
 async def process_phone(message: Message, state: FSMContext):
-    await state.update_data(phone=message.text)
+    normalized = normalize_phone(message.text)
+    if not normalized:
+        await message.answer(
+            "⚠️ Не вдалось розпізнати номер. Введіть український мобільний "
+            "у форматі +380XXXXXXXXX або 0XXXXXXXXX:"
+        )
+        return
+    await state.update_data(phone=normalized)
     await state.set_state(OrderStates.waiting_city)
     await message.answer("Введіть ваше місто:")
 

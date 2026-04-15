@@ -27,6 +27,11 @@ MANAGER_USERNAME = os.getenv("MANAGER_USERNAME", "")
 CACHE_TTL_MINUTES = int(os.getenv("CACHE_TTL_MINUTES", "10"))
 PRODUCTS_PER_PAGE = 10
 STORAGE_ID = int(os.getenv("STORAGE_ID", "1"))
+SPOT_ID = int(os.getenv("SPOT_ID", "1"))
+
+# === Admin / Testing ===
+ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", "0"))
+TEST_PHONE = os.getenv("TEST_PHONE", "")
 
 # === Категорії (захардкоджені з Poster API, дата: 2026-04-08) ===
 # Структура: кореневі → підкатегорії (бренди)

@@ -63,9 +63,9 @@ def _build_products_payload(items: list[dict]) -> list[dict]:
 def _build_comment(order: dict, telegram_username: str | None) -> str:
     username = f"@{telegram_username}" if telegram_username else "невідомо"
     return (
+        f"Telegram: {username}\n"
         f"Заявка з Telegram-бота №{order['order_number']}\n"
-        f"Спосіб оплати: {order['payment_method']}\n"
-        f"Telegram: {username}"
+        f"Спосіб оплати: {order['payment_method']}"
     )
 
 
@@ -135,3 +135,67 @@ async def create_poster_order(
             logger.warning("Poster create attempt %d failed", attempt + 1)
 
     return None
+
+
+TAG_PREFIX = "TG: @"
+
+
+async def _find_client_by_phone(
+    client: httpx.AsyncClient, phone: str
+) -> tuple[int, str] | None:
+    """Знайти client_id + поточний comment за телефоном.
+
+    Повертає (client_id, existing_comment) або None якщо клієнта нема.
+    """
+    try:
+        resp = await client.get(
+            f"{POSTER_API_URL}/clients.getClients",
+            params={"token": POSTER_TOKEN, "phone": phone},
+        )
+        data = resp.json()
+        if "error" in data:
+            logger.warning("Poster getClients error: %s", data["error"])
+            return None
+        clients = data.get("response") or []
+        if not clients:
+            return None
+        c = clients[0]
+        client_id = int(c.get("client_id") or 0)
+        if not client_id:
+            return None
+        existing_comment = str(c.get("client_comment") or c.get("comment") or "")
+        return client_id, existing_comment
+    except Exception:
+        logger.exception("Poster getClients request failed")
+        return None
+
+
+async def tag_client_with_telegram(phone: str, username: str) -> None:
+    """Append 'TG: @username' у `comment` профілю клієнта в Poster.
+
+    Append-з-дедуплікацією: якщо тег уже є в коментарі — нічого не робимо,
+    існуючі замітки Дмитра не чіпаємо.
+
+    Best-effort: будь-який фейл логуємо і йдемо далі, замовлення вже створене.
+    """
+    tag = f"{TAG_PREFIX}{username}"
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        found = await _find_client_by_phone(client, phone)
+        if not found:
+            logger.warning("Poster tag: client not found for phone %s", phone)
+            return
+        client_id, existing = found
+        if tag in existing:
+            return
+        new_comment = f"{existing}\n{tag}".strip() if existing else tag
+        try:
+            resp = await client.post(
+                f"{POSTER_API_URL}/clients.updateClient",
+                params={"token": POSTER_TOKEN},
+                json={"client_id": client_id, "comment": new_comment},
+            )
+            data = resp.json()
+            if "error" in data:
+                logger.warning("Poster updateClient error: %s", data["error"])
+        except Exception:
+            logger.exception("Poster updateClient request failed")

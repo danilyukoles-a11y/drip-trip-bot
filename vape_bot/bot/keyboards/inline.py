@@ -8,34 +8,53 @@ from vape_bot.config.settings import (
     SUBCATEGORIES,
     SUBCATEGORIES_L3,
 )
+from vape_bot.services.poster import poster_cache
+
+
+def _sub_has_in_stock(sub_id: int) -> bool:
+    """L2 категорія: товари напряму або через L3 підкатегорії."""
+    if poster_cache.has_in_stock(sub_id):
+        return True
+    for l3_id in SUBCATEGORIES_L3.get(sub_id, {}):
+        if poster_cache.has_in_stock(l3_id):
+            return True
+    return False
+
+
+def _root_has_in_stock(root_id: int) -> bool:
+    """Коренева категорія: хоч одна підкатегорія з товарами."""
+    return any(_sub_has_in_stock(sub_id) for sub_id in SUBCATEGORIES.get(root_id, {}))
 
 
 def categories_kb() -> InlineKeyboardMarkup:
-    """Кореневі категорії."""
+    """Кореневі категорії — тільки з товарами в наявності."""
     buttons = []
     for cat_id, name in ROOT_CATEGORIES.items():
-        buttons.append([InlineKeyboardButton(text=name, callback_data=f"root_{cat_id}")])
+        if _root_has_in_stock(cat_id):
+            buttons.append([InlineKeyboardButton(text=name, callback_data=f"root_{cat_id}")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def subcategories_kb(root_id: int) -> InlineKeyboardMarkup:
-    """Підкатегорії (бренди) для кореневої категорії."""
+    """Підкатегорії (бренди) — тільки з товарами в наявності."""
     subs = SUBCATEGORIES.get(root_id, {})
     buttons = []
     for sub_id, name in subs.items():
-        buttons.append([InlineKeyboardButton(text=name, callback_data=f"sub_{sub_id}")])
+        if _sub_has_in_stock(sub_id):
+            buttons.append([InlineKeyboardButton(text=name, callback_data=f"sub_{sub_id}")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад до категорій", callback_data="back_categories")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def subcategories_l3_kb(parent_id: int) -> InlineKeyboardMarkup | None:
-    """Підкатегорії 3-го рівня (якщо є)."""
+    """Підкатегорії 3-го рівня — тільки з товарами в наявності."""
     l3 = SUBCATEGORIES_L3.get(parent_id)
     if not l3:
         return None
     buttons = []
     for sub_id, name in l3.items():
-        buttons.append([InlineKeyboardButton(text=name, callback_data=f"sub_{sub_id}")])
+        if poster_cache.has_in_stock(sub_id):
+            buttons.append([InlineKeyboardButton(text=name, callback_data=f"sub_{sub_id}")])
     # Знайти батьківську кореневу для кнопки "назад"
     for root_id, subs in SUBCATEGORIES.items():
         if parent_id in subs:
@@ -61,24 +80,12 @@ def products_kb(products: list[dict], page: int, category_id: int, parent_callba
                 price_str = f"{price_min:.0f} грн"
             else:
                 price_str = f"від {price_min:.0f} до {price_max:.0f} грн"
-
-            stock = p.get("stock", 0)
-            if stock > 0:
-                text = f"{p['name']} — {price_str}"
-            else:
-                text = f"❌ {p['name']} — {price_str}"
-            buttons.append([InlineKeyboardButton(
-                text=text, callback_data=f"prod_{p['id']}_{category_id}_{page}",
-            )])
+            text = f"✅ {p['name']} — {price_str}"
         else:
-            stock = p.get("stock", 0)
-            if stock > 0:
-                text = f"{p['name']} — {p['price']:.0f} грн"
-            else:
-                text = f"❌ {p['name']} — {p['price']:.0f} грн"
-            buttons.append([InlineKeyboardButton(
-                text=text, callback_data=f"prod_{p['id']}_{category_id}_{page}",
-            )])
+            text = f"✅ {p['name']} — {p['price']:.0f} грн"
+        buttons.append([InlineKeyboardButton(
+            text=text, callback_data=f"prod_{p['id']}_{category_id}_{page}",
+        )])
 
     nav = []
     if page > 0:
@@ -102,11 +109,7 @@ def modifications_kb(product_id: str, category_id: int, modifications: list[dict
     """Список модифікацій товару для вибору."""
     buttons = []
     for m in modifications:
-        stock = m.get("stock", 0)
-        if stock > 0:
-            text = f"✅ {m['name']} — {m['price']:.0f} грн"
-        else:
-            text = f"❌ {m['name']} — {m['price']:.0f} грн"
+        text = f"✅ {m['name']} — {m['price']:.0f} грн"
         buttons.append([InlineKeyboardButton(
             text=text,
             callback_data=f"mod_{product_id}_{m['mod_id']}_{category_id}_{page}",

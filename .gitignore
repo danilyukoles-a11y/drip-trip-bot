@@ -1,0 +1,38 @@
+# Секрети
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Claude Code локальні файли
+.claude/
+
+# Локальна документація і робочі матеріали (поза git)
+docs/
+tmp/
+Archive docs/
+
+# Локальні особисті файли
+start-claude.bat
+logo.jpg
+
+# Локальні one-shot скрипти (не для прод)
+vape_bot/scripts/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

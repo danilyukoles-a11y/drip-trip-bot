@@ -2,10 +2,10 @@
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 
 from vape_bot.bot.keyboards.inline import quick_order_kb
-from vape_bot.bot.keyboards.main_menu import main_menu_kb, payment_kb
+from vape_bot.bot.keyboards.main_menu import main_menu_kb, payment_kb, phone_request_kb
 from vape_bot.bot.states.order import OrderStates
 from vape_bot.config.settings import MANAGER_USERNAME
 from vape_bot.database.cart import clear_cart, get_cart, get_cart_total
@@ -13,7 +13,7 @@ from vape_bot.database.orders import create_order, update_poster_ids
 from vape_bot.database.users import get_or_create_user, get_user, update_user
 from vape_bot.services.notification import notify_new_order, notify_poster_sync_failed
 from vape_bot.services.phone import normalize_phone
-from vape_bot.services.poster_orders import create_poster_order
+from vape_bot.services.poster_orders import create_poster_order, tag_client_with_telegram
 
 router = Router()
 
@@ -90,7 +90,24 @@ async def new_order(callback: CallbackQuery, state: FSMContext):
 async def process_full_name(message: Message, state: FSMContext):
     await state.update_data(full_name=message.text)
     await state.set_state(OrderStates.waiting_phone)
-    await message.answer("Введіть ваш номер телефону:")
+    await message.answer(
+        "Введіть ваш номер телефону або натисніть кнопку нижче:",
+        reply_markup=phone_request_kb,
+    )
+
+
+@router.message(OrderStates.waiting_phone, F.contact)
+async def process_phone_contact(message: Message, state: FSMContext):
+    normalized = normalize_phone(message.contact.phone_number)
+    if not normalized:
+        await message.answer(
+            "⚠️ Не вдалось розпізнати номер з контакту. Введіть вручну "
+            "у форматі +380XXXXXXXXX або 0XXXXXXXXX:"
+        )
+        return
+    await state.update_data(phone=normalized)
+    await state.set_state(OrderStates.waiting_city)
+    await message.answer("Введіть ваше місто:", reply_markup=ReplyKeyboardRemove())
 
 
 @router.message(OrderStates.waiting_phone)
@@ -104,7 +121,7 @@ async def process_phone(message: Message, state: FSMContext):
         return
     await state.update_data(phone=normalized)
     await state.set_state(OrderStates.waiting_city)
-    await message.answer("Введіть ваше місто:")
+    await message.answer("Введіть ваше місто:", reply_markup=ReplyKeyboardRemove())
 
 
 @router.message(OrderStates.waiting_city)
@@ -201,5 +218,7 @@ async def process_payment(message: Message, state: FSMContext):
     if poster_result:
         incoming_order_id, transaction_id = poster_result
         update_poster_ids(order["id"], incoming_order_id, transaction_id)
+        if message.from_user.username:
+            await tag_client_with_telegram(order["phone"], message.from_user.username)
     else:
         await notify_poster_sync_failed(message.bot, order["order_number"])

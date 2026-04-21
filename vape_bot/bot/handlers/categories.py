@@ -125,7 +125,10 @@ async def show_products(callback: CallbackQuery):
             parent_callback = f"sub_{parent_id}"
             break
 
-    products = poster_cache.get_products_by_category(sub_id)
+    products = [
+        p for p in poster_cache.get_products_by_category(sub_id)
+        if p.get("stock", 0) > 0
+    ]
 
     if not products:
         await callback.message.edit_text(
@@ -164,7 +167,10 @@ async def paginate_products(callback: CallbackQuery):
             parent_callback = f"sub_{parent_id}"
             break
 
-    products = poster_cache.get_products_by_category(category_id)
+    products = [
+        p for p in poster_cache.get_products_by_category(category_id)
+        if p.get("stock", 0) > 0
+    ]
     total_pages = max(1, (len(products) + 9) // 10)
 
     await callback.message.edit_text(
@@ -193,7 +199,13 @@ async def show_product(callback: CallbackQuery):
             await callback.answer("Немає в наявності", show_alert=True)
             return
 
-        mods = product.get("modifications", [])
+        mods = [
+            m for m in product.get("modifications", [])
+            if m.get("stock", 0) > 0
+        ]
+        if not mods:
+            await callback.answer("Немає в наявності", show_alert=True)
+            return
         effective_cat = cat_id or int(product["category_id"])
         await callback.message.edit_text(
             _product_breadcrumb(effective_cat, product["name"]) + "\nОберіть варіант:",

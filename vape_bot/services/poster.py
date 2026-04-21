@@ -91,7 +91,7 @@ class PosterCache:
                         "stock": mod_stock,
                     })
 
-                prices = [m["price"] for m in mods if m["price"] > 0]
+                prices = [m["price"] for m in mods if m["price"] > 0 and m["stock"] > 0]
                 any_in_stock = any(m["stock"] > 0 for m in mods)
 
                 product["has_modifications"] = True
@@ -194,6 +194,13 @@ class PosterCache:
         """Товари по категорії. Автоматично оновлює кеш."""
         self._ensure_cache()
         return self._products.get(str(category_id), [])
+
+    def has_in_stock(self, category_id: int) -> bool:
+        """Чи є в категорії хоч один товар з stock > 0."""
+        return any(
+            p.get("stock", 0) > 0
+            for p in self._products.get(str(category_id), [])
+        )
 
     def get_product_by_id(self, product_id: str) -> dict | None:
         """Знайти товар за ID у кеші."""

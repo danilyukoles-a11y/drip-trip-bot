@@ -84,6 +84,7 @@ SUBCATEGORIES = {
         32: "Wick&Wire",
         33: "Бустер",
         43: "Troublemaker",
+        45: "InBottle(органіка)",
     },
     # SHISHA (id:37)
     37: {

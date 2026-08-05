@@ -22,7 +22,9 @@ def _sub_has_in_stock(sub_id: int) -> bool:
 
 
 def _root_has_in_stock(root_id: int) -> bool:
-    """Коренева категорія: хоч одна підкатегорія з товарами."""
+    """Коренева категорія: хоч одна підкатегорія з товарами, або товар напряму на корені."""
+    if poster_cache.has_in_stock(root_id):
+        return True
     return any(_sub_has_in_stock(sub_id) for sub_id in SUBCATEGORIES.get(root_id, {}))
 
 
@@ -36,12 +38,20 @@ def categories_kb() -> InlineKeyboardMarkup:
 
 
 def subcategories_kb(root_id: int) -> InlineKeyboardMarkup:
-    """Підкатегорії (бренди) — тільки з товарами в наявності."""
+    """Підкатегорії (бренди) — тільки з товарами в наявності.
+
+    Якщо є товари, прив'язані в Poster напряму до кореневої категорії
+    (без підкатегорії-бренду), додається кнопка "🗂 Інше", що веде на
+    той самий обробник sub_ (show_products), бо кеш вже містить ці
+    товари під ключем кореневої категорії.
+    """
     subs = SUBCATEGORIES.get(root_id, {})
     buttons = []
     for sub_id, name in subs.items():
         if _sub_has_in_stock(sub_id):
             buttons.append([InlineKeyboardButton(text=name, callback_data=f"sub_{sub_id}")])
+    if poster_cache.has_in_stock(root_id):
+        buttons.append([InlineKeyboardButton(text="🗂 Інше", callback_data=f"sub_{root_id}")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад до категорій", callback_data="back_categories")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
